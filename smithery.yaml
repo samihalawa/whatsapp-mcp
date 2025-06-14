@@ -1,0 +1,36 @@
+# Smithery configuration file for WhatsApp MCP Server
+# https://smithery.ai/docs/build/project-config/smithery.yaml
+
+startCommand:
+  type: http
+  configSchema:
+    type: object
+    properties:
+      port:
+        type: number
+        title: "Server Port"
+        description: "Port for the WhatsApp MCP server"
+        default: 8080
+        minimum: 1000
+        maximum: 65535
+      dbPath:
+        type: string
+        title: "Database Path"
+        description: "Path to SQLite database file"
+        default: "./store/messages.db"
+      mediaPath:
+        type: string
+        title: "Media Storage Path"
+        description: "Path to store downloaded media files"
+        default: "./store/media"
+      sessionPath:
+        type: string
+        title: "Session Storage Path"
+        description: "Path to store WhatsApp session data"
+        default: "./store/whatsapp.db"
+      logLevel:
+        type: string
+        title: "Log Level"
+        description: "Logging level for the server"
+        default: "info"
+        enum: ["debug", "info", "warn", "error"]
