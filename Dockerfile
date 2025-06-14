@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS go-builder
+FROM golang:alpine AS go-builder
 
 WORKDIR /app/whatsapp-bridge
 COPY whatsapp-bridge/go.mod whatsapp-bridge/go.sum ./
