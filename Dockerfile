@@ -34,12 +34,8 @@ RUN useradd -m -u 1001 whatsapp
 RUN chown -R whatsapp:whatsapp /app
 USER whatsapp
 
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+# Set environment
+ENV PYTHONUNBUFFERED=1
 
 # Start script
 COPY start-whatsapp-mcp.sh ./
