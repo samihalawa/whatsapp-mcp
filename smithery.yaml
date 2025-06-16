@@ -37,6 +37,18 @@ configSchema:
       minimum: 30
       maximum: 300
   required: []
+commandFunction: |-
+  (config) => ({ 
+    command: 'bash', 
+    args: ['start-whatsapp-mcp.sh'], 
+    env: { 
+      DB_PATH: config.dbPath || './store/messages.db',
+      MEDIA_PATH: config.mediaPath || './store/media',
+      SESSION_PATH: config.sessionPath || './store/whatsapp.db',
+      LOG_LEVEL: config.logLevel || 'info',
+      QR_TIMEOUT: config.qrTimeout?.toString() || '60'
+    } 
+  })
 exampleConfig:
   dbPath: "./store/messages.db"
   mediaPath: "./store/media"
