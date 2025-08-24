@@ -30,4 +30,4 @@ trap cleanup SIGTERM SIGINT
 # Start the MCP server (this will be the main process)
 echo "Starting MCP server..."
 cd /app/whatsapp-mcp-server
-exec uv run main.py
+exec python main.py
