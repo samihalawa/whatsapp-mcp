@@ -2,56 +2,6 @@ version: 1
 runtime: container
 startCommand:
   type: stdio
-  configSchema:
-    type: object
-    properties:
-      dbPath:
-        type: string
-        description: "Path to SQLite database file"
-        default: "./store/messages.db"
-      mediaPath:
-        type: string
-        description: "Path to store downloaded media files"
-        default: "./store/media"
-      sessionPath:
-        type: string
-        description: "Path to store WhatsApp session data"
-        default: "./store/whatsapp.db"
-      logLevel:
-        type: string
-        description: "Logging level for the server"
-        default: "info"
-        enum: ["debug", "info", "warn", "error"]
-      qrTimeout:
-        type: number
-        description: "QR code timeout in seconds"
-        default: 60
-        minimum: 30
-        maximum: 300
-    required: []
-  commandFunction: |-
-    (config) => ({ 
-      command: 'bash', 
-      args: ['start-container.sh'], 
-      env: { 
-        DB_PATH: config.dbPath || './store/messages.db',
-        MEDIA_PATH: config.mediaPath || './store/media',
-        SESSION_PATH: config.sessionPath || './store/whatsapp.db',
-        LOG_LEVEL: config.logLevel || 'info',
-        QR_TIMEOUT: config.qrTimeout?.toString() || '60'
-      } 
-    })
 build:
   dockerfile: "Dockerfile"
   dockerBuildPath: "."
-healthCheck:
-  timeout: 30
-  interval: 10
-  retries: 3
-  startPeriod: 60
-exampleConfig:
-  dbPath: "./store/messages.db"
-  mediaPath: "./store/media"
-  sessionPath: "./store/whatsapp.db"
-  logLevel: "info"
-  qrTimeout: 60
