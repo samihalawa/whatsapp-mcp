@@ -32,7 +32,7 @@ startCommand:
   commandFunction: |-
     (config) => ({ 
       command: 'bash', 
-      args: ['start-whatsapp-mcp.sh'], 
+      args: ['start-container.sh'], 
       env: { 
         DB_PATH: config.dbPath || './store/messages.db',
         MEDIA_PATH: config.mediaPath || './store/media',

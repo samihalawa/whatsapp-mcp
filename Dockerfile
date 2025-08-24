@@ -1,44 +1,74 @@
-FROM golang:alpine AS go-builder
+# Build stage for Go application
+FROM golang:1.21-alpine AS go-builder
+
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 WORKDIR /app/whatsapp-bridge
+
+# Copy Go modules and download dependencies
 COPY whatsapp-bridge/go.mod whatsapp-bridge/go.sum ./
 RUN go mod download
 
+# Copy source code and build
 COPY whatsapp-bridge/ ./
-RUN go build -o whatsapp-bridge main.go
+RUN CGO_ENABLED=1 go build -o whatsapp-bridge main.go
 
+# Final stage
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including SQLite
 RUN apt-get update && apt-get install -y \
     curl \
+    sqlite3 \
+    libsqlite3-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python requirements and install
-COPY whatsapp-mcp-server/pyproject.toml whatsapp-mcp-server/uv.lock ./
-RUN pip install uv && uv sync --frozen
+# Install UV globally for all users
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    mv /root/.local/bin/uvx /usr/local/bin/uvx
 
-# Copy Go binary
+# Copy and install Python dependencies
+COPY whatsapp-mcp-server/pyproject.toml whatsapp-mcp-server/uv.lock ./whatsapp-mcp-server/
+WORKDIR /app/whatsapp-mcp-server
+RUN uv sync --frozen
+
+# Go back to app root
+WORKDIR /app
+
+# Copy Go binary from builder
 COPY --from=go-builder /app/whatsapp-bridge/whatsapp-bridge ./
 
 # Copy Python source
-COPY whatsapp-mcp-server/ ./
+COPY whatsapp-mcp-server/ ./whatsapp-mcp-server/
 
-# Create directories
-RUN mkdir -p store
+# Copy startup script
+COPY start-container.sh ./
+RUN chmod +x start-container.sh
+
+# Create necessary directories
+RUN mkdir -p store/media
 
 # Create non-root user
-RUN useradd -m -u 1001 whatsapp
-RUN chown -R whatsapp:whatsapp /app
+RUN useradd -m -u 1001 whatsapp && \
+    chown -R whatsapp:whatsapp /app
+
 USER whatsapp
 
-# Set environment
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV PATH="/home/whatsapp/.local/bin:$PATH"
 
-# Start script
-COPY start-whatsapp-mcp.sh ./
-RUN chmod +x start-whatsapp-mcp.sh
+# Expose any necessary ports (if needed)
+# EXPOSE 8080
 
-CMD ["./start-whatsapp-mcp.sh"]
+# Health check to ensure both services are running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD ps aux | grep -q "[w]hatsapp-bridge" && ps aux | grep -q "[p]ython.*main.py" || exit 1
+
+# Start both services
+CMD ["./start-container.sh"]
