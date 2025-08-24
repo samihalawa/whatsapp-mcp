@@ -12,7 +12,10 @@ from whatsapp import (
     send_message as whatsapp_send_message,
     send_file as whatsapp_send_file,
     send_audio_message as whatsapp_audio_voice_message,
-    download_media as whatsapp_download_media
+    download_media as whatsapp_download_media,
+    get_connection_status,
+    get_qr_code,
+    wait_for_connection
 )
 
 # Initialize FastMCP server
@@ -245,6 +248,36 @@ def download_media(message_id: str, chat_jid: str) -> Dict[str, Any]:
             "success": False,
             "message": "Failed to download media"
         }
+
+@mcp.tool()
+def get_whatsapp_status() -> Dict[str, Any]:
+    """Get WhatsApp connection status and QR code if not connected.
+    
+    Returns:
+        Dictionary with connection status and QR code (if needed)
+    """
+    return get_connection_status()
+
+@mcp.tool()
+def get_whatsapp_qr() -> Dict[str, Any]:
+    """Get WhatsApp QR code for authentication.
+    
+    Returns:
+        Dictionary with QR code as text and base64 image
+    """
+    return get_qr_code()
+
+@mcp.tool()
+def wait_for_whatsapp_connection(timeout: int = 60) -> Dict[str, Any]:
+    """Wait for WhatsApp to be connected.
+    
+    Args:
+        timeout: Maximum seconds to wait (default 60)
+    
+    Returns:
+        Dictionary with connection status
+    """
+    return wait_for_connection(timeout)
 
 if __name__ == "__main__":
     # Initialize and run the server

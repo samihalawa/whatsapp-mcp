@@ -1,0 +1,160 @@
+# Multi-stage build for WhatsApp MCP with both Go bridge and Python server
+# Optimized for Smithery.ai deployment
+
+# Stage 1: Build Go WhatsApp bridge
+FROM golang:1.21-alpine AS go-builder
+
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev sqlite-dev
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files
+COPY whatsapp-bridge/go.mod whatsapp-bridge/go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY whatsapp-bridge/*.go ./
+
+# Build the Go binary with CGO enabled for SQLite
+ENV CGO_ENABLED=1
+RUN go build -o whatsapp-bridge -ldflags="-s -w" .
+
+# Stage 2: Final runtime image
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    # SQLite for database
+    sqlite3 \
+    # FFmpeg for audio processing
+    ffmpeg \
+    # Supervisor for process management
+    supervisor \
+    # curl for health checks
+    curl \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -s /bin/bash whatsapp && \
+    mkdir -p /app/store /app/logs && \
+    chown -R whatsapp:whatsapp /app
+
+WORKDIR /app
+
+# Copy Go binary from builder
+COPY --from=go-builder --chown=whatsapp:whatsapp /build/whatsapp-bridge /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    'mcp[cli]>=1.6.0' \
+    'httpx>=0.28.1' \
+    'requests>=2.32.3' \
+    'fastapi>=0.100.0' \
+    'uvicorn>=0.23.0'
+
+# Copy Python MCP server code
+COPY --chown=whatsapp:whatsapp whatsapp-mcp-server/ ./whatsapp-mcp-server/
+
+# Copy supervisor configuration
+COPY --chown=whatsapp:whatsapp <<EOF /etc/supervisor/conf.d/whatsapp.conf
+[supervisord]
+nodaemon=true
+user=root
+logfile=/app/logs/supervisord.log
+pidfile=/app/logs/supervisord.pid
+
+[program:whatsapp-bridge]
+command=/app/whatsapp-bridge
+directory=/app
+user=whatsapp
+autostart=true
+autorestart=true
+stdout_logfile=/app/logs/bridge.log
+stderr_logfile=/app/logs/bridge.err
+environment=HOME="/home/whatsapp",USER="whatsapp"
+priority=1
+
+[program:mcp-server]
+command=python /app/whatsapp-mcp-server/main_smithery.py
+directory=/app
+user=whatsapp
+autostart=true
+autorestart=true
+stdout_logfile=/app/logs/mcp.log
+stderr_logfile=/app/logs/mcp.err
+environment=HOME="/home/whatsapp",USER="whatsapp",PYTHONUNBUFFERED="1",SMITHERY_ENV="1",WHATSAPP_API_URL="http://localhost:8080/api"
+priority=2
+startsecs=5
+
+[group:whatsapp]
+programs=whatsapp-bridge,mcp-server
+EOF
+
+# Create startup script
+COPY --chown=whatsapp:whatsapp <<'EOF' /app/start.sh
+#!/bin/bash
+set -e
+
+echo "Starting WhatsApp MCP services..."
+
+# Ensure directories exist
+mkdir -p /app/store /app/logs
+
+# Start supervisor
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/whatsapp.conf
+EOF
+
+RUN chmod +x /app/start.sh
+
+# Health check script
+COPY --chown=whatsapp:whatsapp <<'EOF' /app/health.sh
+#!/bin/bash
+
+# Check if bridge is running
+if ! curl -s http://localhost:8080/api/qr > /dev/null 2>&1; then
+    echo "WhatsApp bridge is not responding"
+    exit 1
+fi
+
+# Check if MCP server is running (adjust port if using HTTP transport)
+if ! pgrep -f "main_smithery.py" > /dev/null 2>&1; then
+    echo "MCP server is not running"
+    exit 1
+fi
+
+echo "All services healthy"
+exit 0
+EOF
+
+RUN chmod +x /app/health.sh
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    SMITHERY_ENV=1 \
+    DB_PATH=/app/store/messages.db \
+    SESSION_PATH=/app/store/whatsapp.db \
+    MEDIA_PATH=/app/store/media \
+    LOG_LEVEL=info \
+    QR_TIMEOUT=180 \
+    WHATSAPP_API_URL=http://localhost:8080/api
+
+# Volume for persistent data
+VOLUME ["/app/store"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /app/health.sh || exit 1
+
+# Switch to non-root user
+USER whatsapp
+
+# MCP server listens on stdio by default, HTTP on 8000 if configured
+EXPOSE 8000
+
+# Start both services
+CMD ["/app/start.sh"]
