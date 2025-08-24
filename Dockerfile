@@ -1,3 +1,6 @@
+# Use the official UV image for Python as base
+FROM ghcr.io/astral-sh/uv:python3.12-alpine AS uv-base
+
 # Build stage for Go application
 FROM golang:1.21-alpine AS go-builder
 
@@ -15,31 +18,45 @@ RUN go mod download
 COPY whatsapp-bridge/ ./
 RUN CGO_ENABLED=1 go build -o whatsapp-bridge main.go
 
-# Final stage - using Python base
-FROM python:3.11-slim
+# Final stage using UV base
+FROM uv-base
 
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    sqlite3 \
-    libsqlite3-dev \
+RUN apk add --no-cache \
+    sqlite \
+    sqlite-dev \
     ffmpeg \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
+    bash \
+    procps
 
-# Install pip packages directly (simpler than UV for container)
-RUN pip install --no-cache-dir \
-    'mcp[cli]>=1.6.0' \
-    'httpx>=0.28.1' \
-    'requests>=2.32.3'
+# Enable bytecode compilation
+ENV UV_COMPILE_BYTECODE=1
+
+# Copy from the cache instead of linking since it's a mounted volume
+ENV UV_LINK_MODE=copy
+
+# Copy Python project files
+COPY whatsapp-mcp-server/pyproject.toml whatsapp-mcp-server/uv.lock ./whatsapp-mcp-server/
+
+# Install Python dependencies using UV with caching
+WORKDIR /app/whatsapp-mcp-server
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=whatsapp-mcp-server/uv.lock,target=uv.lock \
+    --mount=type=bind,source=whatsapp-mcp-server/pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev
+
+# Copy the rest of the Python source and install
+COPY whatsapp-mcp-server/ ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+# Go back to app root
+WORKDIR /app
 
 # Copy Go binary from builder
 COPY --from=go-builder /app/whatsapp-bridge/whatsapp-bridge ./whatsapp-bridge
-
-# Copy Python source
-COPY whatsapp-mcp-server/ ./whatsapp-mcp-server/
 
 # Copy startup script
 COPY start-container.sh ./
@@ -49,13 +66,14 @@ RUN chmod +x start-container.sh
 RUN mkdir -p store/media && \
     chmod -R 777 store
 
+# Place executables in the environment at the front of the path
+ENV PATH="/app/whatsapp-mcp-server/.venv/bin:$PATH"
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/whatsapp-mcp-server
 
-# Remove healthcheck for now to avoid deployment issues
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-#   CMD ps aux | grep -q "[w]hatsapp-bridge" || exit 1
+# Reset the entrypoint, don't invoke `uv`
+ENTRYPOINT []
 
 # Start both services
 CMD ["./start-container.sh"]
