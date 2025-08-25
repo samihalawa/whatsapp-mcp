@@ -1,12 +1,9 @@
 """
 WhatsApp functions for MCP server.
-Uses real implementation when bridge is available, falls back to mock data.
+Requires real WhatsApp bridge to be running.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
-import os
-import sys
 
 # Try to import the full implementation
 try:
