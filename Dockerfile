@@ -1,59 +1,42 @@
-# Multi-stage build for WhatsApp Bridge + MCP Server
-FROM golang:1.23-alpine AS go-builder
+FROM golang:1.21-alpine AS go-builder
 
 WORKDIR /build
-
-# Install build dependencies
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 
-# Copy and build Go WhatsApp bridge
-COPY whatsapp-bridge/ ./
+COPY whatsapp-bridge/go.mod whatsapp-bridge/go.sum ./
 RUN go mod download
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o whatsapp-bridge .
 
-# Final stage - Python with Go binary
+COPY whatsapp-bridge/main.go ./
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o whatsapp-bridge main.go
+
 FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 appuser
 
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    sqlite3 \
-    supervisor \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-RUN pip install --no-cache-dir \
-    'mcp[cli]>=1.6.0' \
-    'httpx>=0.28.1' \
-    'requests>=2.32.3' \
-    'qrcode[pil]>=7.4.2' \
-    'Pillow>=10.0.0'
-
-# Copy Go binary from builder
 COPY --from=go-builder /build/whatsapp-bridge /app/whatsapp-bridge
+COPY whatsapp-mcp-server/ /app/whatsapp-mcp-server/
+COPY start.sh /app/start.sh
 
-# Copy MCP server code
-COPY whatsapp-mcp-server/ ./whatsapp-mcp-server/
+RUN pip install --no-cache-dir \
+    mcp \
+    httpx \
+    requests
 
-# Create store directory for WhatsApp data
-RUN mkdir -p /app/store && chmod 755 /app/store
+RUN chmod +x /app/whatsapp-bridge /app/start.sh && \
+    mkdir -p /app/store && \
+    chown -R appuser:appuser /app
 
-# Copy supervisor config
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+USER appuser
 
-# Copy startup script
-COPY start-services.sh /app/start-services.sh
-RUN chmod +x /app/start-services.sh
-
-# Environment
-ENV PYTHONUNBUFFERED=1
-ENV WHATSAPP_BRIDGE_PORT=8080
-
-# Expose bridge port (internal)
 EXPOSE 8080
 
-# Run both services via supervisor
-CMD ["/app/start-services.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/start.sh"]

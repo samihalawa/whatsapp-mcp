@@ -1,16 +1,10 @@
 *.db
-claude_desktop_config.json
-whatsapp.log
-
-# Binaries
-whatsapp-bridge/whatsapp-client
-whatsapp-bridge/whatsapp-bridge
-*.exe
-
-# Python
+*.pyc
 __pycache__/
-*.py[cod]
 .venv/
-
-# WhatsApp session data
+venv/
+whatsapp-bridge/whatsapp-bridge
 whatsapp-bridge/store/
+*.exe
+*.log
+.DS_Store
