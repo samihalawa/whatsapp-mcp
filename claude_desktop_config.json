@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "whatsapp": {
+      "command": "python",
+      "args": [
+        "/absolute/path/to/whatsapp-mcp/whatsapp_mcp.py"
+      ],
+      "env": {
+        "WHATSAPP_API_URL": "http://localhost:3000",
+        "WHATSAPP_AUTH_USER": "",
+        "WHATSAPP_AUTH_PASS": ""
+      }
+    }
+  }
+}
