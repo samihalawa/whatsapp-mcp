@@ -1,0 +1,28 @@
+[project]
+name = "whatsapp-mcp"
+version = "1.0.0"
+description = "WhatsApp MCP Server - Production-ready Model Context Protocol server for WhatsApp integration"
+authors = [{name = "WhatsApp MCP Contributors"}]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+whatsapp-mcp = "whatsapp_mcp:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["whatsapp_mcp.py"]
